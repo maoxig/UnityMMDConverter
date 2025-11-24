@@ -7,14 +7,16 @@ using System.IO;
 using System.Text;
 using MMD.VMD;
 
-public class VMDLoaderScript {
+public class VMDLoaderScript
+{
 
 	/// <summary>
 	/// VMDファイルのヘッダー取得
 	/// </summary>
 	/// <param name='file_path'>VMDファイルのパス</param>
 	/// <returns>ヘッダー</returns>
-	public static VMDFormat.Header GetHeader(string file_path) {
+	public static VMDFormat.Header GetHeader(string file_path)
+	{
 		VMDLoaderScript loader = new VMDLoaderScript();
 		return loader.GetHeader_(file_path);
 	}
@@ -24,7 +26,8 @@ public class VMDLoaderScript {
 	/// </summary>
 	/// <param name='file_path'>VMDファイルのパス</param>
 	/// <returns>内部形式データ</returns>
-	public static VMDFormat Import(string file_path) {
+	public static VMDFormat Import(string file_path)
+	{
 		VMDLoaderScript loader = new VMDLoaderScript();
 		return loader.Import_(file_path);
 	}
@@ -35,12 +38,14 @@ public class VMDLoaderScript {
 	/// <remarks>
 	/// ユーザーに依るインスタンス作成を禁止する
 	/// </remarks>
-	private VMDLoaderScript() {}
+	private VMDLoaderScript() { }
 
-	private VMDFormat.Header GetHeader_(string file_path) {
+	private VMDFormat.Header GetHeader_(string file_path)
+	{
 		VMDFormat.Header result;
 		using (FileStream stream = new FileStream(file_path, FileMode.Open, FileAccess.Read))
-		using (BinaryReader bin = new BinaryReader(stream)) {
+		using (BinaryReader bin = new BinaryReader(stream))
+		{
 			file_path_ = null;
 			binary_reader_ = bin;
 			result = ReadHeader();
@@ -48,9 +53,11 @@ public class VMDLoaderScript {
 		return result;
 	}
 
-	private VMDFormat Import_(string file_path) {
+	private VMDFormat Import_(string file_path)
+	{
 		using (FileStream stream = new FileStream(file_path, FileMode.Open, FileAccess.Read))
-		using (BinaryReader bin = new BinaryReader(stream)) {
+		using (BinaryReader bin = new BinaryReader(stream))
+		{
 			file_path_ = file_path;
 			binary_reader_ = bin;
 			Read();
@@ -58,21 +65,25 @@ public class VMDLoaderScript {
 		return format_;
 	}
 
-	private VMDFormat Read() {
+	private VMDFormat Read()
+	{
 		format_ = new VMDFormat();
 		EntryPathes();
-		
+
 		// 読み込み失敗した場合はだいたいデータがない
 		// 失敗しても読み込み続けることがあるので例外でキャッチして残りはnullにしておく
 		int read_count = 0;
-		try {
+		try
+		{
 			format_.header = ReadHeader(); read_count++;
 			format_.motion_list = ReadMotionList(); read_count++;
 			format_.skin_list = ReadSkinList(); read_count++;
 			format_.camera_list = ReadCameraList(); read_count++;
 			format_.light_list = ReadLightList(); read_count++;
 			format_.self_shadow_list = ReadSelfShadowList(); read_count++;
-		} catch (EndOfStreamException e) {
+		}
+		catch (EndOfStreamException e)
+		{
 			Debug.Log(e.Message);
 			if (read_count <= 0)
 				format_.header = null;
@@ -84,57 +95,61 @@ public class VMDLoaderScript {
 				format_.camera_list = null;
 			if (read_count <= 4 || format_.light_list.light_count <= 0)
 				format_.light_list = null;
-			if (read_count <= 5 || format_.self_shadow_list.self_shadow_count <= 0) 
+			if (read_count <= 5 || format_.self_shadow_list.self_shadow_count <= 0)
 				format_.self_shadow_list = null;
 		}
 		return format_;
 	}
 
-	private void EntryPathes() {
+	private void EntryPathes()
+	{
 		format_.path = file_path_;
 		format_.name = Path.GetFileNameWithoutExtension(file_path_); // .vmdを抜かす
 		format_.folder = Path.GetDirectoryName(file_path_); // VMDが格納されているフォルダ
 	}
 
-	public VMDFormat.Header ReadHeader() {
+	public VMDFormat.Header ReadHeader()
+	{
 		VMDFormat.Header result = new VMDFormat.Header();
 		result.vmd_header = ConvertByteToString(binary_reader_.ReadBytes(30), "");
 		result.vmd_model_name = ConvertByteToString(binary_reader_.ReadBytes(20), "");
 		return result;
 	}
-	
-	private VMDFormat.MotionList ReadMotionList() {
+
+	private VMDFormat.MotionList ReadMotionList()
+	{
 		VMDFormat.MotionList result = new VMDFormat.MotionList();
 		result.motion_count = binary_reader_.ReadUInt32();
 		result.motion = new Dictionary<string, List<VMDFormat.Motion>>();
-		
+
 		// 一度バッファに貯めてソートする
 		VMDFormat.Motion[] buf = new VMDFormat.Motion[result.motion_count];
-		for (int i = 0; i < result.motion_count; i++) {
-			buf[i] = ReadMotion();
-		}
-		Array.Sort(buf, (x,y)=>((int)x.frame_no - (int)y.frame_no));
-
-		try
-		{
-			// モーションの数だけnewされないよね？
-			for (int i = 0; i < result.motion_count; i++)
-			{
-				result.motion.Add(buf[i].bone_name, new List<VMDFormat.Motion>());
-			}
-		}
-		catch { }
-
-		// dictionaryにどんどん登録
 		for (int i = 0; i < result.motion_count; i++)
 		{
-			result.motion[buf[i].bone_name].Add(buf[i]);
+			buf[i] = ReadMotion();
+		}
+		Array.Sort(buf, (x, y) => ((int)x.frame_no - (int)y.frame_no));
+
+		// 【终极修复】合并循环：检查Key和添加Value在同一步完成
+		// 这样绝对不可能出现 KeyNotFoundException
+		for (int i = 0; i < result.motion_count; i++)
+		{
+			string key = buf[i].bone_name;
+
+			// 如果字典里还没有这个骨骼名字，先创建一个空的List
+			if (!result.motion.ContainsKey(key))
+			{
+				result.motion[key] = new List<VMDFormat.Motion>();
+			}
+
+			// 然后直接添加数据
+			result.motion[key].Add(buf[i]);
 		}
 
 		return result;
 	}
-	
-	private VMDFormat.Motion ReadMotion() {
+	private VMDFormat.Motion ReadMotion()
+	{
 		VMDFormat.Motion result = new VMDFormat.Motion();
 		result.bone_name = ConvertByteToString(binary_reader_.ReadBytes(15), "");
 		result.frame_no = binary_reader_.ReadUInt32();
@@ -143,64 +158,66 @@ public class VMDLoaderScript {
 		result.interpolation = binary_reader_.ReadBytes(64);
 		return result;
 	}
-	
+
 	/// <summary>
 	/// 表情リスト
 	/// </summary>
-	private VMDFormat.SkinList ReadSkinList() {
+	private VMDFormat.SkinList ReadSkinList()
+	{
 		VMDFormat.SkinList result = new VMDFormat.SkinList();
 		result.skin_count = binary_reader_.ReadUInt32();
 		result.skin = new Dictionary<string, List<VMDFormat.SkinData>>();
-		
+
 		// 一度バッファに貯めてソートする
 		VMDFormat.SkinData[] buf = new VMDFormat.SkinData[result.skin_count];
-		for (int i = 0; i < result.skin_count; i++) {
-			buf[i] = ReadSkinData();
-		}
-		Array.Sort(buf, (x,y)=>((int)x.frame_no - (int)y.frame_no));
-
-		try
-		{
-			// 全てのモーションを探索し、利用されているボーンを特定する
-			for (int i = 0; i < result.skin_count; i++)
-			{
-				result.skin.Add(buf[i].skin_name, new List<VMDFormat.SkinData>());
-			}
-		}
-		catch
-		{
-			//重複している場合はこの処理に入る
-		}
-
-		// 辞書に登録する作業
 		for (int i = 0; i < result.skin_count; i++)
 		{
-			result.skin[buf[i].skin_name].Add(buf[i]);
+			buf[i] = ReadSkinData();
+		}
+		Array.Sort(buf, (x, y) => ((int)x.frame_no - (int)y.frame_no));
+
+		// 【终极修复】合并循环
+		for (int i = 0; i < result.skin_count; i++)
+		{
+			string key = buf[i].skin_name;
+
+			// 检查Key并初始化
+			if (!result.skin.ContainsKey(key))
+			{
+				result.skin[key] = new List<VMDFormat.SkinData>();
+			}
+
+			// 添加数据
+			result.skin[key].Add(buf[i]);
 		}
 
 		return result;
 	}
-	
-	private VMDFormat.SkinData ReadSkinData() {
+
+	private VMDFormat.SkinData ReadSkinData()
+	{
 		VMDFormat.SkinData result = new VMDFormat.SkinData();
 		result.skin_name = ConvertByteToString(binary_reader_.ReadBytes(15), "");
 		result.frame_no = binary_reader_.ReadUInt32();
 		result.weight = binary_reader_.ReadSingle();
 		return result;
 	}
-	
-	private VMDFormat.CameraList ReadCameraList() {
+
+	private VMDFormat.CameraList ReadCameraList()
+	{
 		VMDFormat.CameraList result = new VMDFormat.CameraList();
 		result.camera_count = binary_reader_.ReadUInt32();
 		result.camera = new VMDFormat.CameraData[result.camera_count];
-		for (int i = 0; i < result.camera_count; i++) {
+		for (int i = 0; i < result.camera_count; i++)
+		{
 			result.camera[i] = ReadCameraData();
 		}
-		Array.Sort(result.camera, (x,y)=>((int)x.frame_no - (int)y.frame_no));
+		Array.Sort(result.camera, (x, y) => ((int)x.frame_no - (int)y.frame_no));
 		return result;
 	}
-	
-	private VMDFormat.CameraData ReadCameraData() {
+
+	private VMDFormat.CameraData ReadCameraData()
+	{
 		VMDFormat.CameraData result = new VMDFormat.CameraData();
 		result.frame_no = binary_reader_.ReadUInt32();
 		result.length = binary_reader_.ReadSingle();
@@ -211,47 +228,53 @@ public class VMDLoaderScript {
 		result.perspective = binary_reader_.ReadByte();
 		return result;
 	}
-	
-	private VMDFormat.LightList ReadLightList() {
+
+	private VMDFormat.LightList ReadLightList()
+	{
 		VMDFormat.LightList result = new VMDFormat.LightList();
 		result.light_count = binary_reader_.ReadUInt32();
 		result.light = new VMDFormat.LightData[result.light_count];
-		for (int i = 0; i < result.light_count; i++) {
+		for (int i = 0; i < result.light_count; i++)
+		{
 			result.light[i] = ReadLightData();
 		}
-		
-		Array.Sort(result.light, (x,y)=>((int)x.frame_no - (int)y.frame_no));
+
+		Array.Sort(result.light, (x, y) => ((int)x.frame_no - (int)y.frame_no));
 		return result;
 	}
-	
-	private VMDFormat.LightData ReadLightData() {
+
+	private VMDFormat.LightData ReadLightData()
+	{
 		VMDFormat.LightData result = new VMDFormat.LightData();
 		result.frame_no = binary_reader_.ReadUInt32();
 		result.rgb = ReadSinglesToColor(binary_reader_, 1);
 		result.location = ReadSinglesToVector3(binary_reader_);
 		return result;
 	}
-	
-	private VMDFormat.SelfShadowList ReadSelfShadowList() {
+
+	private VMDFormat.SelfShadowList ReadSelfShadowList()
+	{
 		VMDFormat.SelfShadowList result = new VMDFormat.SelfShadowList();
 		result.self_shadow_count = binary_reader_.ReadUInt32();
 		result.self_shadow = new VMDFormat.SelfShadowData[result.self_shadow_count];
-		for (int i = 0; i < result.self_shadow_count; i++) {
+		for (int i = 0; i < result.self_shadow_count; i++)
+		{
 			result.self_shadow[i] = ReadSelfShadowData();
 		}
-		
-		Array.Sort(result.self_shadow, (x,y)=>((int)x.frame_no - (int)y.frame_no));
+
+		Array.Sort(result.self_shadow, (x, y) => ((int)x.frame_no - (int)y.frame_no));
 		return result;
 	}
-	
-	private VMDFormat.SelfShadowData ReadSelfShadowData() {
+
+	private VMDFormat.SelfShadowData ReadSelfShadowData()
+	{
 		VMDFormat.SelfShadowData result = new VMDFormat.SelfShadowData();
 		result.frame_no = binary_reader_.ReadUInt32();
 		result.mode = binary_reader_.ReadByte();
 		result.distance = binary_reader_.ReadSingle();
 		return result;
 	}
-		
+
 	// ShiftJISからUTF-8に変換してstringで返す
 	private static string ConvertByteToString(byte[] bytes, string line_feed_code = null)
 	{
@@ -259,15 +282,17 @@ public class VMDLoaderScript {
 		if (bytes[0] == 0) return "";
 		int count;
 		for (count = 0; count < bytes.Length; count++) if (bytes[count] == 0) break;
-		byte[] buf = new byte[count];		// NULL文字を含めるとうまく行かない
-		for (int i = 0; i < count; i++) {
+		byte[] buf = new byte[count];       // NULL文字を含めるとうまく行かない
+		for (int i = 0; i < count; i++)
+		{
 			buf[i] = bytes[i];
 		}
 
 		buf = Encoding.Convert(Encoding.GetEncoding(932), Encoding.UTF8, buf);
 
-        string result = Encoding.UTF8.GetString(buf);
-		if (null != line_feed_code) {
+		string result = Encoding.UTF8.GetString(buf);
+		if (null != line_feed_code)
+		{
 			//改行コード統一(もしくは除去)
 			result = result.Replace("\r\n", "\n").Replace('\r', '\n').Replace("\n", line_feed_code);
 		}
@@ -285,7 +310,7 @@ public class VMDLoaderScript {
 		}
 		return new Vector3(result[0], result[1], result[2]);
 	}
-		
+
 	private static Color ReadSinglesToColor(BinaryReader bin)
 	{
 		const int count = 4;
@@ -296,7 +321,7 @@ public class VMDLoaderScript {
 		}
 		return new Color(result[0], result[1], result[2], result[3]);
 	}
-		
+
 	private static Color ReadSinglesToColor(BinaryReader bin, float fix_alpha)
 	{
 		const int count = 3;
@@ -319,8 +344,8 @@ public class VMDLoaderScript {
 		}
 		return new Quaternion(result[0], result[1], result[2], result[3]);
 	}
-	
-	string			file_path_;
-	BinaryReader	binary_reader_;
-	VMDFormat		format_;
+
+	string file_path_;
+	BinaryReader binary_reader_;
+	VMDFormat format_;
 }

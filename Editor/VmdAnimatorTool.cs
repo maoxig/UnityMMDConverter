@@ -186,7 +186,15 @@ namespace UnityMMDConverter
                     ResetAnimVmdState();
                 }
                 EditorGUILayout.EndHorizontal();
+                // 如果选择了已有动画剪辑，也要设置animVmdFilePath
+                if (sourceClip != null)
+                {
+                    string assetPath = AssetDatabase.GetAssetPath(sourceClip);
+                    // 这里获取sourceclip的路径作为vmd路径的参考（仅用于显示）
+                    animVmdFilePath = Path.ChangeExtension(assetPath, "vmd");
+                }
             }
+
             else
             {
 
