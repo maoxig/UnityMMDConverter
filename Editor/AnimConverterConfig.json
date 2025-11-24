@@ -1,0 +1,10 @@
+{
+    "defaultSkinnedMeshPath": "Body",
+    "defaultSkinnedMeshName": "Body",
+    "directMappingMode": true,
+    "enableCameraAnimation": true,
+    "cameraRootPath": "Camera_root",
+    "cameraComponentPath": "Camera_root/Camera_root_1/Camera",
+    "cameraDistancePath": "Camera_root/Camera_root_1",
+    "bundleOutputPath": "E:/SteamLibrary/steamapps/common/7 Days To Die/Mods/VRoidMod/Dances"
+}
