@@ -7,8 +7,7 @@
         "MMD",
         "VRM",
         "UniGLTF",
-        "Unity.Timeline",
-        "VRoidModSpringBones"
+        "Unity.Timeline"
     ],
     "includePlatforms": [
         "Editor"
