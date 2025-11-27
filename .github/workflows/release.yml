@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install git-cliff
+        uses: taiki-e/install-action@v2
+        with:
+          tool: git-cliff
+
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ || echo "")
+          if [ -z "$PREV_TAG" ]; then
+            RANGE=""
+          else
+            RANGE="$PREV_TAG..HEAD"
+          fi
+
+          # 生成 Changelog
+          echo "## Changelog" > RELEASE_NOTE.md
+          git-cliff $RANGE --tag ${{ github.ref_name }} >> RELEASE_NOTE.md
+          echo "" >> RELEASE_NOTE.md
+
+          # 拼接固定说明
+          if [ -f ".github/RELEASE_FOOTER.md" ]; then
+            cat .github/RELEASE_FOOTER.md >> RELEASE_NOTE.md
+          fi
+
+          # 设置输出变量（给后续 step 用）
+          {
+            echo "release_body<<EOF"
+            cat RELEASE_NOTE.md
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Release ${{ github.ref_name }}
+          body: ${{ steps.changelog.outputs.release_body }}
+          files: |
+            dist/*.dll
+            dist/*.me
+            dist/*.rar
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
