@@ -1,8 +1,6 @@
-# VroidMMDTools
+# UnityMMDConverter
 
 **其他语言版本: [English](README.md), [中文](README_zh.md)**
-
-5分钟极速版视频教程：
 
 
 主要是关于MMD转换成unity可用的anim和controller，并且添加表情和镜头曲线，利用脚本优化了许多繁琐费时的工作
@@ -10,11 +8,9 @@
 
 1. 小工具箱插件
 
-https://github.com/maoxig/VroidMMDTools/releases/
+https://github.com/maoxig/UnityMMDConverter/releases/
 
 2. MMD4Mecanim: http://stereoarts.jp/
-
-（或者如果已经有PMX2FBX直接设置下路径就行）
 
 
 关于MMD，本视频/工具仅仅是整合了一些已有的工具/思路，在转换、使用时请遵守原MMD的相关规定，尊重相关著作权。如有对二次使用者造成的损害，与本人、本工具无关。
@@ -27,14 +23,14 @@ https://github.com/maoxig/VroidMMDTools/releases/
 
 ### 0. 准备项目
 
-下载准备好Unity, MMD4Mecanim（可选，但是得有PMX2FBX），以及这个unity工具箱就行
+下载准备好Unity, MMD4Mecanim，以及这个unity工具箱就行
 
 导入unity包只需把.unitypackage拖进project里，如果导入时有提示按yes即可。
 
 
 ### 1. 确保这个工具箱是正常的
 
-导入工具箱插件之后，会在窗口上面多几个选项，主要是关注**VMD Morph Camera Animator Tool**和**VMD To Anim Converter**这两个选项。
+导入工具箱插件之后，会在窗口上面多几个选项，主要是关注**Unity MMD Converter**和**VMD To Anim Converter**这两个选项。
 
 ![alt text](resource~/step1.png)
 
@@ -44,7 +40,7 @@ https://github.com/maoxig/VroidMMDTools/releases/
 ![alt text](resource~/step1a.png)
 
 
-然后点击打开**VMD Morph Camera Animator Tool**，进入插件主窗口。
+然后点击打开**Unity MMD Converter**，进入插件主窗口。
 
 这里说明一下，里面提供的配置默认都是设置好的，如果不知道要不要改那就是不要改。
 
@@ -52,7 +48,7 @@ https://github.com/maoxig/VroidMMDTools/releases/
 
 ### 2. 准备MMD文件
 
-把要处理的MMD 动作.vmd，（镜头.vmd，表情.vmd）和音频（.mp3/.ogg/.wav）文件夹放到项目里（可以创个Workspace整洁一些）。这些资源获取的问题见评论区置顶。
+把要处理的MMD 动作.vmd，（镜头.vmd，表情.vmd）和音频（.mp3/.ogg/.wav）文件夹放到项目里（可以创个Workspace整洁一些）。
 
 ![alt text](resource~/step2.png)
 
@@ -63,12 +59,12 @@ https://github.com/maoxig/VroidMMDTools/releases/
 
 这里有两种情况，一种是只有vmd文件，就把vmd拖进去，然后点击生成动画剪辑。
 
-还有一种情况是已经有了animClip（比如之前已经执行过生成动画剪辑，此时可以直接用Output里面存的），因此，也提供了直接使用anim的导入选项。
+还有一种情况是已经有了animClip（比如之前已经执行过生成动画剪辑，此时可以直接用已有的.anim文件），因此，也提供了直接使用anim的导入选项。
 
 ![alt text](resource~/step3.png)
 
 
-点击从vmd生成动画剪辑之后，会在output里面生成一个anim文件，但是此时这里的anim是只包含人物运动数据的anim，因此我们在后面添加上镜头和表情。
+点击从vmd生成动画剪辑之后，会生成一个anim文件，但是此时这里的anim是只包含人物运动数据的anim，因此我们在后面添加上镜头和表情。
 
 在生成动画剪辑时，如果出错，建议看一下原理，使用MMD4Mecanim提取出animClip，然后使用已有的animClip
 
@@ -78,8 +74,6 @@ https://github.com/maoxig/VroidMMDTools/releases/
 
 ![alt text](resource~/step4.png)
 
-
-你现在可以放心导入镜头，因为我已经在下面这个帖子里修复了很多问题，而且镜头是MMD的灵魂所在，我建议你加上。
 
 新版本的工具箱多了一个镜头缩放的选项，我举个例子你就知道这是干嘛的：有一些镜头vmd是针对身高1.8m的角色设计的，那么在贴脸对焦时就会对焦在1.8m，那如果角色模型只有1.6m高，那此时在游戏里，镜头就会对焦在头顶上，所以在导入vmd时要缩放一下镜头（乘上1.6/1.8=0.88）。
 
@@ -100,13 +94,15 @@ https://github.com/maoxig/VroidMMDTools/releases/
 
 
 
-**重要：新版本（v0.0.4之后）提供了一个基于Unity Timeline（通常会自带，非常古老的unity2017.1以下可能得装一下）的一键预览按钮，只需要拖一个已有的人物模型到框内，然后点击之后可以一键预览：**
+这里提供了一个基于Unity Timeline（通常会自带，非常古老的unity2017.1以下可能得装一下）的一键预览按钮，只需要拖一个已有的人物模型到框内，然后点击之后可以一键预览：
 
 ![alt text](resource~/step6a.png)
 
 
-此外要在unity内部预览镜头的话得在人物节点创建一个一定规范的镜头，我已经提供了一个脚本一键创建符合规范的镜头，允许创建脚本、点击按钮后，再点击Timeline的播放，你可以直接在game窗口直接看到运镜的效果，而不需要播放游戏，因此后面三步可以合并到一步，大大提高检查效率。
+此外要在unity内部预览镜头的话得在人物节点创建一个一定规范的镜头，我已经提供了一个脚本`Add MMD Camera for selected object`一键创建符合规范的镜头，选择模型后，点击选项创建脚本、点击按钮后，再点击Timeline的播放，你可以直接在game窗口直接看到运镜的效果，而不需要播放游戏，因此后面三步可以合并到一步，大大提高检查效率。
 
+
+## 可选部分
 
 
 ### 6.5 检查步骤：音频检查（可选）：
@@ -131,14 +127,16 @@ https://github.com/maoxig/VroidMMDTools/releases/
 
 找到Output新创建的动画，预览一下，确保人物面对的方向（红色箭头）和蓝色箭头在大部分时候基本上对齐，不对齐的话可以拖动修改第一个offset（Root Transform Rotation那个）。
 
-如果人物的初始位置很奇怪，可以尝试改第三个Center of Mass改为original
+如果人物的初始位置很奇怪，可以尝试改第三个选项。
+
+之类通常可以把每一个都设置成Original
 
 ![alt text](resource~/step7.png)
 
 
 ### 8. 检查步骤：最终检查（可选）
 
-利用一个已有的人物检查一切正常（可以用vrm的人物预览一下），主要是关注骨架、动作、表情、镜头（可选）。要在unity内部预览镜头的话得在人物节点创建一个一定规范的镜头，我已经提供了一个脚本一键创建符合规范的镜头；
+利用一个已有的人物检查一切正常（可以用vrm的人物预览一下），主要是关注骨架、动作、表情、镜头（可选）。要在unity内部预览镜头的话得在人物节点创建一个一定规范的镜头，我已经提供了一个脚本一键创建符合规范的镜头； `Add MMD Camera for selected object`
 
 ![alt text](resource~/step8.png)
 
