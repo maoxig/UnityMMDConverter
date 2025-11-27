@@ -100,7 +100,7 @@ namespace UnityMMDConverter
             string selectPath = AssetDatabase.GetAssetPath(selected);
             if (!string.IsNullOrEmpty(selectPath))
             {
-                CameraVmdAgent camera_agent = new CameraVmdAgent(selectPath, "", "Distance", "Distance/Camera", 1.0f);
+                CameraVmdAgent camera_agent = new CameraVmdAgent(selectPath, "", "Camera_root_1", "Camera_root_1/Camera", 1.0f);
                 camera_agent.CreateAnimationClip();
                 Debug.LogFormat("[{0}]:Export Camera Vmd Success!", System.DateTime.Now);
             }
@@ -113,14 +113,14 @@ namespace UnityMMDConverter
         [MenuItem("GameObject/MMD/Generate MMDCamera")]
         internal static void GenerateMMDCamera()
         {
-            var mmdCamera = new GameObject("MMDCamera");
-            var distance = new GameObject("Distance");
+            var mmdCamera = new GameObject("Camera_root");
+            var distance = new GameObject("Camera_root_1");
             var camera = new GameObject("Camera");
 
             distance.transform.parent = mmdCamera.transform;
             camera.transform.parent = distance.transform;
 
-            distance.transform.rotation = Quaternion.Euler(0, 180, 0);
+            mmdCamera.transform.rotation = Quaternion.Euler(0, 180, 0);
 
             mmdCamera.AddComponent<Animator>();
             camera.AddComponent<Camera>();
