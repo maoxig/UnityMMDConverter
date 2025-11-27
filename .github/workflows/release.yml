@@ -12,6 +12,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -24,10 +25,9 @@ jobs:
           tool: git-cliff
 
       - name: Generate Changelog
-        id: changelog
+        shell: bash
         run: |
           PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || true)
-
           if [ -z "$PREV_TAG" ]; then
             RANGE=""
           else
@@ -42,17 +42,11 @@ jobs:
             cat .github/RELEASE_FOOTER.md >> RELEASE_NOTE.md
           fi
 
-          {
-            echo "release_body<<EOF"
-            cat RELEASE_NOTE.md
-            echo "EOF"
-          } >> $GITHUB_OUTPUT
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
-          body: ${{ steps.changelog.outputs.release_body }}
+          body_path: RELEASE_NOTE.md
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
