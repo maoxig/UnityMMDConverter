@@ -118,3 +118,7 @@ If everything is correct, click the package button to export. The tool automatic
 2. **Motion Issues with VMD Files**: Some `.vmd` files rely heavily on the bone structure of the `.pmx` model. If errors occur, try using a more compatible `.pmx` model or modify the model’s bones using PMX Editor.
 
 3. **Incorrect Initial Position or Orientation**: If the extracted `.anim` clip has correct motion, expressions, and camera but the initial position or direction is off, adjust the panel options in Step 7.
+
+
+## Acknowledgments
+https://github.com/ShiinaRinne/MMD6UnityTool

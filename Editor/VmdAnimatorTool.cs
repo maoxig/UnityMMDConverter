@@ -712,9 +712,7 @@ namespace UnityMMDConverter
             }
 
             // 2. 加载当前工具生成的目标Controller（必须是包含Timeline所需动画的Controller）
-            string outputDir = outputLocationMode == OutputLocationMode.DefaultFolder
-                ? DefaultOutputPath
-                : Path.GetDirectoryName(animVmdFilePath) + "/";
+            string outputDir = GetOutputPath();
             string targetControllerPath = $"{outputDir}{bundleBaseName}.controller";
             RuntimeAnimatorController targetController = AssetDatabase.LoadAssetAtPath<RuntimeAnimatorController>(targetControllerPath);
 
@@ -739,9 +737,7 @@ namespace UnityMMDConverter
             // ----------------------------------------------------------------------
 
             // 创建Timeline资产路径
-            string outputPath = outputLocationMode == OutputLocationMode.DefaultFolder
-                ? DefaultOutputPath
-                : Path.GetDirectoryName(animVmdFilePath) + "/";
+            string outputPath = GetOutputPath();
             string timelinePath = $"{outputPath}{bundleBaseName}_preview.asset";
             string sceneDirectorName = $"{bundleBaseName}_director";
 
@@ -909,9 +905,7 @@ namespace UnityMMDConverter
             }
 
             // 获取中间anim, controller文件的路径
-            string outputPath = outputLocationMode == OutputLocationMode.DefaultFolder
-                ? DefaultOutputPath
-                : Path.GetDirectoryName(animVmdFilePath) + "/";
+            string outputPath = GetOutputPath();
             DrawBundleAssetsPreview(outputPath);
 
             UnityEngine.GUI.enabled = CanBuildBundle(outputPath);
@@ -994,9 +988,7 @@ namespace UnityMMDConverter
                 }
 
 
-                string outputPath = outputLocationMode == OutputLocationMode.DefaultFolder
-                    ? DefaultOutputPath
-                    : Path.GetDirectoryName(animVmdFilePath) + "/";
+                string outputPath = GetOutputPath();
                 string clipPath = $"{outputPath}{bundleBaseName}.anim";
                 AssetDatabase.CreateAsset(baseClip, clipPath);
                 // 设置动画剪辑的相关属性
@@ -1177,9 +1169,7 @@ namespace UnityMMDConverter
             }
 
             // 2. 准备路径
-            string animOutputDir = outputLocationMode == OutputLocationMode.DefaultFolder
-                ? DefaultOutputPath
-                : Path.GetDirectoryName(animVmdFilePath) + "/";
+            string animOutputDir = GetOutputPath();
 
             AssetUtils.EnsureDirectoryExists(animOutputDir);
             string animFileName = Path.GetFileNameWithoutExtension(animVmdFilePath) + ".anim";
@@ -1259,6 +1249,18 @@ namespace UnityMMDConverter
         #endregion
 
         #region 状态检查和重置
+
+        private string GetOutputPath()
+        {
+            if (outputLocationMode == OutputLocationMode.DefaultFolder)
+            {
+                return DefaultOutputPath;
+            }
+
+            return !string.IsNullOrEmpty(animVmdFilePath)
+                ? Path.GetDirectoryName(animVmdFilePath) + "/"
+                : DefaultOutputPath;
+        }
 
         private bool CanProcessAnimation()
         {

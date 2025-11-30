@@ -167,3 +167,5 @@ https://github.com/maoxig/UnityMMDConverter/releases/
 
 3. 如果提取出来的animClip里面，动作、表情、镜头都一切正常，但是初始位置、方向等等不正常，这通常是unity抽风，去第7步看那个面板调节那几个选项试试
 
+## 致谢
+https://github.com/ShiinaRinne/MMD6UnityTool
