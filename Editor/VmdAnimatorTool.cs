@@ -200,14 +200,14 @@ namespace UnityMMDConverter
             {
 
                 // 使用新工具绘制单个文件选择
-                animVmdFilePath = MMDCustomGUI.DrawSingleFileSelector(animVmdFilePath, "vmd", Get(ANIM_VMD_FILE));
+                animVmdFilePath = MMDCustomGUI.DrawSingleFileSelector(animVmdFilePath, Get(ANIM_VMD_FILE), "vmd");
 
                 // 辅助选项
                 useQuickConfig = EditorGUILayout.Toggle(Get(QUICK_CONFIG), useQuickConfig);
                 showPmxOptions = EditorGUILayout.Foldout(showPmxOptions, Get(PMX_ASSIST));
                 if (showPmxOptions)
                 {
-                    pmxFilePath = MMDCustomGUI.DrawSingleFileSelector(pmxFilePath, "pmx", "PMX Reference");
+                    pmxFilePath = MMDCustomGUI.DrawSingleFileSelector(pmxFilePath, "PMX/PMD Reference", "pmx", "pmd");
                 }
 
                 // 设置超时时间
@@ -238,8 +238,8 @@ namespace UnityMMDConverter
                 // 1. 文件选择列表 (修复多语言)
                 MMDCustomGUI.DrawFileSelectorList(
                     cameraVmdFilePaths,
-                    "vmd",
-                    Get(CAMERA_VMD_FILE) // 使用多语言 Key
+                    Get(CAMERA_VMD_FILE), // 使用多语言 Key
+                    "vmd"
                 );
 
                 EditorGUILayout.Space();
@@ -345,8 +345,8 @@ namespace UnityMMDConverter
             // 1. 文件选择列表 (修复多语言)
             MMDCustomGUI.DrawFileSelectorList(
                 morphVmdFilePaths,
-                "vmd",
-                Get(MORPH_VMD_FILE) // 使用多语言 Key
+                Get(MORPH_VMD_FILE), // 使用多语言 Key
+                 "vmd"
             );
 
             EditorGUILayout.Space();
