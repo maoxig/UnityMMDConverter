@@ -43,7 +43,7 @@ namespace UnityMMDConverter
         private float progress = 0f;
         private string progressMessage = "";
         // 超时时间
-        private int timeoutSeconds = 240;
+        private int timeoutSeconds = 300;
 
         // 2. 镜头VMD（支持多个）
         private List<string> cameraVmdFilePaths = new List<string>();
@@ -62,7 +62,7 @@ namespace UnityMMDConverter
         // 配置选项
         private string newClipName = "NewMorphAnimation";
         private string controllerName = "NewAnimatorController";
-        private OutputLocationMode outputLocationMode = OutputLocationMode.DefaultFolder;
+        private OutputLocationMode outputLocationMode = OutputLocationMode.SameAsVmd;
 
         // 形态键管理
         private List<string> availableMorphs = new List<string>();
@@ -172,6 +172,7 @@ namespace UnityMMDConverter
         private void DrawAnimationSection()
         {
             EditorGUILayout.LabelField(Get(SECTION_ANIMATION), EditorStyles.boldLabel);
+
             animExtractionMode = (AnimExtractionMode)EditorGUILayout.EnumPopup(Get(ANIM_SOURCE), animExtractionMode);
 
             if (animExtractionMode == AnimExtractionMode.FromExistingClip)
@@ -209,6 +210,8 @@ namespace UnityMMDConverter
                     pmxFilePath = MMDCustomGUI.DrawSingleFileSelector(pmxFilePath, "pmx", "PMX Reference");
                 }
 
+                // 设置超时时间
+                timeoutSeconds = EditorGUILayout.IntField(Get(TIMEOUT_SECONDS), timeoutSeconds);
                 // 生成按钮逻辑 (保持原有的异步逻辑，或封装到 Logic 层)
                 if (!string.IsNullOrEmpty(animVmdFilePath) && File.Exists(animVmdFilePath))
                 {
@@ -291,6 +294,8 @@ namespace UnityMMDConverter
         }
         private void DrawSettingsPanel()
         {
+
+            EditorGUILayout.LabelField("0. " + Get("settings_panel"), EditorStyles.boldLabel);
             showSettingsPanel = EditorGUILayout.Foldout(showSettingsPanel, Get("settings_panel"), true);
 
             if (showSettingsPanel)
