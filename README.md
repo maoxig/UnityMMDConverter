@@ -23,6 +23,10 @@ Prepare Unity, **MMD4Mecanim**, and this Unity toolbox plugin.
 
 To import the Unity package, drag the `.unitypackage` file into the Unity Project window. If prompted during import, click "Yes."
 
+After installing MMD4Mecanim, you will see the following tools:
+
+![step0](resource~/step0.png)
+
 ### 1. Verify Toolbox Functionality
 
 After importing the toolbox plugin, you’ll see new options in the Unity menu bar, specifically **Unity MMD Converter** and **VMD To Anim Converter**.

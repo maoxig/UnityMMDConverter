@@ -27,6 +27,9 @@ https://github.com/maoxig/UnityMMDConverter/releases/
 
 导入unity包只需把.unitypackage拖进project里，如果导入时有提示按yes即可。
 
+MMD4ecanim安装好后会有下图工具：
+![step0](resource~/step0.png)
+
 
 ### 1. 确保这个工具箱是正常的
 
