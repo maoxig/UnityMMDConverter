@@ -23,7 +23,7 @@ https://github.com/maoxig/UnityMMDConverter/releases/
 
 ### 0. 准备项目
 
-下载准备好Unity, MMD4Mecanim，以及这个unity工具箱就行
+下载准备好Unity, **MMD4Mecanim**，以及这个unity工具箱就行
 
 导入unity包只需把.unitypackage拖进project里，如果导入时有提示按yes即可。
 

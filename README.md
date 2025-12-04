@@ -19,7 +19,7 @@ Below is the detailed tutorial. At the end, you’ll find a section on potential
 
 ### 0. Project Preparation
 
-Prepare Unity, MMD4Mecanim, and this Unity toolbox plugin.
+Prepare Unity, **MMD4Mecanim**, and this Unity toolbox plugin.
 
 To import the Unity package, drag the `.unitypackage` file into the Unity Project window. If prompted during import, click "Yes."
 
