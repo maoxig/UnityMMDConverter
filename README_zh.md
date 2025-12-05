@@ -15,6 +15,9 @@ https://github.com/maoxig/UnityMMDConverter/releases/
 
 关于MMD，本视频/工具仅仅是整合了一些已有的工具/思路，在转换、使用时请遵守原MMD的相关规定，尊重相关著作权。如有对二次使用者造成的损害，与本人、本工具无关。
 
+一些已经转换好的舞蹈.unity3d（约300个）可以在这里下载：
+https://drive.google.com/drive/folders/1YU7-Hz-O8-9B2E58mxQxexJTBTCT42jr?usp=sharing
+
 下面是图文教程，最后面有可能出现的问题，你可以先跟着图文过一遍，如果有问题优先看原理、存在的问题，然后想办法解决，如果还是有问题可以反馈。
 
 ——————————————————————————————

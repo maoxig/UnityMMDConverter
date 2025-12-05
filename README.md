@@ -11,6 +11,9 @@ This tool focuses on converting MMD (MikuMikuDance) files into Unity-compatible 
 
 **Regarding MMD**: This video/tool merely integrates existing tools and workflows. When converting or using MMD files, please adhere to the original MMD regulations and respect relevant copyrights. The author and this tool are not responsible for any damages caused to secondary users.
 
+Some already converted dance `.unity3d` files (about 300) can be downloaded here:
+https://drive.google.com/drive/folders/1YU7-Hz-O8-9B2E58mxQxexJTBTCT42jr?usp=sharing
+
 Below is the detailed tutorial. At the end, you’ll find a section on potential issues. It’s recommended to follow the tutorial first. If problems arise, refer to the principles, known issues, and troubleshooting steps. If issues persist, feel free to provide feedback.
 
 ---
