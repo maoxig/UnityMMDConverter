@@ -88,16 +88,42 @@ namespace UnityMMDConverter.Utils
                     Debug.LogWarning($"未找到动画控制器：{controllerPath}");
                 }
 
-                // 查找并复制音频资源
                 if (!string.IsNullOrEmpty(audioFilePath))
                 {
                     string audioAssetPath = GetProjectRelativePath(audioFilePath);
-                    if (AssetDatabase.LoadAssetAtPath<AudioClip>(audioAssetPath) != null)
+
+                    // 1. 先复制文件到临时目录（这一步会生成新的临时文件）
+                    string audioExtension = Path.GetExtension(audioFilePath);
+                    string tempAudioPath = CopyAssetToTemp(audioAssetPath, tempBuildFolder, $"{safeOutputName}{audioExtension}");
+
+                    // 2. 获取【临时文件】的Importer进行设置（这是关键修改点）
+                    // 必须修改临时文件的设置，因为CopyAssetToTemp丢弃了原meta文件，导致设置重置为默认。
+                    var importer = AssetImporter.GetAtPath(tempAudioPath) as AudioImporter;
+                    if (importer != null)
                     {
-                        string audioExtension = Path.GetExtension(audioFilePath);
-                        string tempAudioPath = CopyAssetToTemp(audioAssetPath, tempBuildFolder, $"{safeOutputName}{audioExtension}");
-                        tempAssets.Add(tempAudioPath);
+                        // 【关键设置1】启用后台加载
+                        // 这允许Unity在后台线程处理音频的预加载，避免阻塞主线程
+                        importer.loadInBackground = true;
+
+                        var settings = importer.defaultSampleSettings;
+
+                        // 【关键设置2】设置为 Streaming (流式加载)
+                        // 对于舞蹈音乐这种长音频，Streaming 是绝对的最佳选择。
+                        // 它只加载极小的缓冲区到内存，剩下的边播边读。
+                        // 这能彻底消除 "DecompressOnLoad" 带来的巨大内存峰值和解压卡顿。
+                        settings.loadType = AudioClipLoadType.Streaming;
+
+                        // 推荐使用 Vorbis 压缩，它在流式播放下表现很好
+                        settings.compressionFormat = AudioCompressionFormat.Vorbis;
+                        settings.quality = 0.9f; // 质量设置
+
+                        importer.defaultSampleSettings = settings;
+
+                        // 应用设置并重新导入临时文件
+                        importer.SaveAndReimport();
                     }
+
+                    tempAssets.Add(tempAudioPath);
                 }
 
                 // 验证是否有足够的资源进行打包
