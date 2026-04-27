@@ -22,6 +22,8 @@ https://drive.google.com/drive/folders/1YU7-Hz-O8-9B2E58mxQxexJTBTCT42jr?usp=sha
 
 ——————————————————————————————
 
+视频教程： https://www.bilibili.com/video/BV1x1d1ByEBq/
+
 图文教程：
 
 ### 0. 准备项目

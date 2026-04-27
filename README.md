@@ -18,6 +18,8 @@ Below is the detailed tutorial. At the end, you’ll find a section on potential
 
 ---
 
+Video Tutorial: https://www.bilibili.com/video/BV1x1d1ByEBq/
+
 ## Tutorial
 
 ### 0. Project Preparation
