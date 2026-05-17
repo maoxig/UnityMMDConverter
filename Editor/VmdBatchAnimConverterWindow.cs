@@ -57,7 +57,7 @@ namespace UnityMMDConverter
         private bool autoFindPmxBesideVmd = true;
         private string referencePmxPath = "";
 
-        private OutputLocationMode outputLocationMode = OutputLocationMode.SaveAsVmd;
+        private OutputLocationMode outputLocationMode = OutputLocationMode.SameAsVmd;
         private string customOutputPath = DefaultOutputPath;
 
         private bool overwriteExisting = true;
