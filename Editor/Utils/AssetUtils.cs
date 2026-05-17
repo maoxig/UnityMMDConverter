@@ -259,6 +259,8 @@ namespace UnityMMDConverter.Utils
             var stateMachine = controller.layers[0].stateMachine;
             var state = stateMachine.AddState(clip.name);
             state.motion = clip;
+            // 开启Foot IK
+            state.iKOnFeet = true;
             stateMachine.defaultState = state;
 
             // 设置控制器名称与文件名一致

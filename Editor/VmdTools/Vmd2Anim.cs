@@ -9,6 +9,17 @@ using System.Threading.Tasks;
 using UnityMMDConverter.Utils;
 namespace VMD2Anim
 {
+    /// <summary>批量流水线中单条 VMD 任务（阶段 1 产出 FbxAbsPath，阶段 2 写入 AnimPath）。</summary>
+    public sealed class VmdFbxJob
+    {
+        public string VmdPath;
+        public string PmxPath;
+        public string AnimOutputDir;
+        public string FbxAbsPath;
+        public string ErrorMessage;
+        public bool Pmx2FbxSucceeded;
+    }
+
     public class VMDConverter : EditorWindow
     {
         #region 配置参数
@@ -262,61 +273,26 @@ namespace VMD2Anim
                     return false;
                 }
 
-                // 步骤1：生成FBX
                 progressCallback?.Invoke(0.3f, "生成FBX文件...");
                 generatedFbxAbsPath = await RunPMX2FBXAsync(
                     ConversionSettings.Load().PMX2FBXPath,
                     pmxPath,
                     vmdPath,
-                    pmxDir, // 工作目录为PMX所在目录
-                    progressCallback,
+                    pmxDir,
                     quickMode,
-                    timeoutMs, // 传递超时参数
-                    cancellationToken // 传递取消令牌
-                );
+                    timeoutMs,
+                    cancellationToken);
 
                 UnityEngine.Debug.Log($"[VMD转换] FBX生成成功: {generatedFbxAbsPath}");
 
-                // 步骤2：刷新AssetDatabase以识别新生成的FBX
                 progressCallback?.Invoke(0.5f, "导入FBX并提取动画...");
-                AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
-                // 转换回Unity路径格式
-                fbxPath = MakeRelativePath(generatedFbxAbsPath);
-
-                // 步骤3：设置FBX导入为Humanoid（直接使用项目内FBX路径）
-                EnsureFBXImportSettings(fbxPath);
-                AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
-
-                // 步骤4：提取动画（直接从项目内FBX提取）
-                AnimationClip extractedClip = ExtractHumanoidAnimation(fbxPath, vmdFileName, quickLoadAnim);
-                if (extractedClip == null)
-                    throw new Exception("未从FBX中找到有效的Humanoid动画");
-
-                progressCallback?.Invoke(0.9f, "保存动画文件...");
-                string animDir = Path.GetDirectoryName(finalAnimPath);
-                if (!Directory.Exists(animDir))
-                {
-                    Directory.CreateDirectory(animDir);
-                }
-                string relativeAnimPath = MakeRelativePath(finalAnimPath);
-                if (!relativeAnimPath.StartsWith("Assets/"))
-                    throw new Exception($"无效的资产路径: {relativeAnimPath}");
-
-                // --- 修改开始：先创建资产，再应用设置 ---
-
-                // 1. 先将单纯的数据文件创建到硬盘
-                AssetDatabase.CreateAsset(extractedClip, relativeAnimPath);
-
-                // 2. 针对已经存在于 AssetDatabase 中的资源应用设置
-                // 注意：必须重新加载一次或者直接使用 CreateAsset 后的引用（extractedClip此时已关联到磁盘）
-                AnimUtils.ApplyAnimationClipSettings(extractedClip);
-
-                // 3. 标记文件已修改，确保设置被写入磁盘
-                EditorUtility.SetDirty(extractedClip);
-                AssetDatabase.SaveAssets();
-                AssetDatabase.Refresh();
-
-                // --- 修改结束 ---
+                ImportFbxAndSaveAnim(
+                    generatedFbxAbsPath,
+                    finalAnimPath,
+                    overwriteExisting,
+                    quickLoadAnim,
+                    progressCallback,
+                    scheduleFbxCleanup: true);
 
                 progressCallback?.Invoke(1.0f, "转换完成!");
                 return true;
@@ -326,14 +302,6 @@ namespace VMD2Anim
                 progressCallback?.Invoke(0f, $"转换失败: {ex.Message}");
                 UnityEngine.Debug.LogError($"[VMD转换] 失败: {ex.Message}");
                 return false;
-            }
-            finally
-            {
-                // 步骤6：清理生成的FBX文件（避免项目污染）
-                if (!string.IsNullOrEmpty(generatedFbxAbsPath))
-                {
-                    CleanupGeneratedFbx(MakeRelativePath(generatedFbxAbsPath));
-                }
             }
         }
 
@@ -432,101 +400,176 @@ namespace VMD2Anim
             return true;
         }
 
-        // 执行PMX2FBX工具异步版本
-        private static Task<string> RunPMX2FBXAsync(string toolPath, string pmxPath, string vmdPath, string workDir,
-                    Action<float, string> progressCallback = null, bool quickMode = true,
-                    int timeoutMs = 180000, CancellationToken cancellationToken = default)
+        /// <summary>
+        /// 阶段 1：并行调用 PMX2FBX（不修改工具目录 pmx2fbx.xml，不触碰 Unity AssetDatabase）。
+        /// </summary>
+        public static Task<string> RunPMX2FBXAsync(
+            string toolPath,
+            string pmxPath,
+            string vmdPath,
+            string workDir,
+            bool quickMode = false,
+            int timeoutMs = 180000,
+            CancellationToken cancellationToken = default)
         {
-            return Task.Run(() => RunPMX2FBXSync(toolPath, pmxPath, vmdPath, workDir, progressCallback, quickMode, timeoutMs, cancellationToken));
+            return Task.Run(
+                () => RunPMX2FBXSync(toolPath, pmxPath, vmdPath, workDir, quickMode, timeoutMs, cancellationToken),
+                cancellationToken);
         }
 
-        // 同步执行PMX2FBX
-        private static string RunPMX2FBXSync(string toolPath, string pmxPath, string vmdPath, string workDir,
-                Action<float, string> progressCallback = null, bool quickMode = true,
-                int timeoutMs = 180000, CancellationToken cancellationToken = default)
+        /// <summary>
+        /// 为并行任务复制 PMX 到独立子目录，避免多个进程写同一 FBX。
+        /// </summary>
+        public static string PrepareIsolatedPmxWorkspace(string pmxPath, string vmdPath, string batchTempRoot)
         {
-            string toolDirectory = Path.GetDirectoryName(toolPath);
-            string defaultConfigPath = Path.Combine(toolDirectory, "pmx2fbx.xml");
-            string backupConfigPath = Path.Combine(toolDirectory, "pmx2fbx.xml.bak");
-            string tempConfigPath = Path.Combine(workDir, "pmx2fbx_temp.xml"); // 临时配置放在PMX目录
-            bool configBackedUp = false;
+            pmxPath = Path.GetFullPath(pmxPath);
+            vmdPath = Path.GetFullPath(vmdPath);
+            string vmdKey = Path.GetFileNameWithoutExtension(vmdPath);
+            string jobDir = Path.Combine(batchTempRoot, $"{SanitizeDirName(vmdKey)}_{Guid.NewGuid():N}");
+            Directory.CreateDirectory(jobDir);
 
-            // 这里需要把路径都改为绝对路径
+            string destPmx = Path.Combine(jobDir, Path.GetFileName(pmxPath));
+            File.Copy(pmxPath, destPmx, true);
+            return destPmx;
+        }
+
+        /// <summary>
+        /// 阶段 2：在主线程导入 FBX 并写出 .anim。
+        /// </summary>
+        public static bool ImportFbxAndSaveAnim(
+            string fbxAbsPath,
+            string finalAnimPath,
+            bool overwriteExisting,
+            bool quickLoadAnim,
+            Action<float, string> progressCallback = null,
+            bool scheduleFbxCleanup = true)
+        {
+            if (File.Exists(finalAnimPath) && !overwriteExisting)
+            {
+                progressCallback?.Invoke(0f, "目标 .anim 已存在且未允许覆盖");
+                return false;
+            }
+
+            AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
+            string fbxAssetPath = MakeRelativePath(fbxAbsPath);
+
+            EnsureFBXImportSettings(fbxAssetPath);
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
+
+            string vmdFileName = Path.GetFileNameWithoutExtension(finalAnimPath);
+            AnimationClip extractedClip = ExtractHumanoidAnimation(fbxAssetPath, vmdFileName, quickLoadAnim);
+            if (extractedClip == null)
+                throw new Exception("未从 FBX 中找到有效的 Humanoid 动画");
+
+            progressCallback?.Invoke(0.9f, "保存动画文件...");
+            string animDir = Path.GetDirectoryName(finalAnimPath);
+            if (!string.IsNullOrEmpty(animDir) && !Directory.Exists(animDir))
+                Directory.CreateDirectory(animDir);
+
+            string relativeAnimPath = MakeRelativePath(finalAnimPath);
+            if (!relativeAnimPath.StartsWith("Assets/"))
+                throw new Exception($"无效的资产路径: {relativeAnimPath}");
+
+            AssetDatabase.CreateAsset(extractedClip, relativeAnimPath);
+            AnimUtils.ApplyAnimationClipSettings(extractedClip);
+            EditorUtility.SetDirty(extractedClip);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+
+            if (scheduleFbxCleanup)
+                CleanupGeneratedFbx(fbxAssetPath);
+
+            return true;
+        }
+
+        public static string FindGeneratedFbxPath(string pmxPath, string vmdPath)
+        {
+            pmxPath = Path.GetFullPath(pmxPath);
+            vmdPath = Path.GetFullPath(vmdPath);
+            string pmxDir = Path.GetDirectoryName(pmxPath);
+            string vmdBase = Path.GetFileNameWithoutExtension(vmdPath);
+
+            var candidates = new[]
+            {
+                Path.Combine(pmxDir, vmdBase + ".fbx"),
+                Path.ChangeExtension(pmxPath, ".fbx"),
+            };
+
+            foreach (var candidate in candidates)
+            {
+                if (File.Exists(candidate))
+                    return Path.GetFullPath(candidate);
+            }
+
+            throw new FileNotFoundException(
+                $"未找到 PMX2FBX 生成的 FBX（已尝试: {string.Join(", ", candidates)}）");
+        }
+
+        private static string SanitizeDirName(string name)
+        {
+            foreach (char c in Path.GetInvalidFileNameChars())
+                name = name.Replace(c, '_');
+            return string.IsNullOrEmpty(name) ? "job" : name;
+        }
+
+        private static string RunPMX2FBXSync(
+            string toolPath,
+            string pmxPath,
+            string vmdPath,
+            string workDir,
+            bool quickMode,
+            int timeoutMs,
+            CancellationToken cancellationToken)
+        {
             toolPath = Path.GetFullPath(toolPath);
             pmxPath = Path.GetFullPath(pmxPath);
             vmdPath = Path.GetFullPath(vmdPath);
             workDir = Path.GetFullPath(workDir);
-            try
+
+            if (quickMode)
+                UnityEngine.Debug.Log("[VMD转换] 快速模式已启用（不再改写工具目录 pmx2fbx.xml，使用工具自带配置）");
+
+            string arguments = $"\"{pmxPath}\" \"{vmdPath}\"";
+            UnityEngine.Debug.Log($"[PMX2FBX] 执行命令: {toolPath} {arguments}");
+            using (var process = new Process())
             {
-                // 仅快速模式生成临时配置
-                if (quickMode)
-                    GenerateQuickConvertConfig(tempConfigPath, quickMode);
-
-                // 备份原始配置（必要操作）
-                if (File.Exists(defaultConfigPath))
+                process.StartInfo = new ProcessStartInfo
                 {
-                    File.Copy(defaultConfigPath, backupConfigPath, true);
-                    configBackedUp = true;
-                }
+                    FileName = toolPath,
+                    Arguments = arguments,
+                    WorkingDirectory = workDir,
+                    UseShellExecute = true,
+                    CreateNoWindow = false,
+                    RedirectStandardOutput = false,
+                    RedirectStandardError = false
+                };
 
-                // 应用临时配置（仅快速模式）
-                if (quickMode && File.Exists(tempConfigPath))
-                    File.Copy(tempConfigPath, defaultConfigPath, true);
-                // 执行PMX2FBX，直接在项目内生成FBX
-                string arguments = $"\"{pmxPath}\" \"{vmdPath}\"";
-                UnityEngine.Debug.Log($"[PMX2FBX] 执行命令: {toolPath} {arguments}");
-                using (Process process = new Process())
+                process.Start();
+
+                var startTime = DateTime.Now;
+                while (!process.HasExited)
                 {
-                    process.StartInfo = new ProcessStartInfo
+                    if (cancellationToken.IsCancellationRequested)
                     {
-                        FileName = toolPath,
-                        Arguments = arguments,
-                        WorkingDirectory = workDir,
-                        UseShellExecute = true, // 启用Shell
-                        CreateNoWindow = false,
-                        RedirectStandardOutput = false, // 不重定向
-                        RedirectStandardError = false   // 不重定向
-                    };
-
-                    process.Start();
-
-                    DateTime startTime = DateTime.Now;
-                    while (!process.HasExited)
-                    {
-                        if (cancellationToken.IsCancellationRequested)
-                        {
-                            try { process.Kill(); } catch { }
-                            throw new OperationCanceledException("PMX2FBX转换被取消", cancellationToken);
-                        }
-                        if ((DateTime.Now - startTime).TotalMilliseconds > timeoutMs)
-                        {
-                            process.Kill();
-                            throw new TimeoutException($"PMX2FBX工具执行超时（{timeoutMs / 1000}秒），可能是文件错误或工具无响应");
-                        }
-                        process.WaitForExit(100);
+                        try { process.Kill(); }
+                        catch { /* ignore */ }
+                        throw new OperationCanceledException("PMX2FBX转换被取消", cancellationToken);
                     }
 
-                    if (process.ExitCode != 0)
-                        throw new Exception($"PMX2FBX执行失败，退出码: {process.ExitCode}");
+                    if ((DateTime.Now - startTime).TotalMilliseconds > timeoutMs)
+                    {
+                        process.Kill();
+                        throw new TimeoutException(
+                            $"PMX2FBX工具执行超时（{timeoutMs / 1000}秒），可能是文件错误或工具无响应");
+                    }
 
-                    string fbxAbsPath = Path.ChangeExtension(pmxPath, ".fbx");
-                    if (!File.Exists(fbxAbsPath))
-                        throw new Exception($"未找到生成的FBX文件: {fbxAbsPath}");
+                    process.WaitForExit(100);
+                }
 
-                    return fbxAbsPath;
-                }
-            }
-            finally
-            {
-                // 恢复原始配置（必要操作）
-                if (configBackedUp && File.Exists(backupConfigPath))
-                {
-                    File.Copy(backupConfigPath, defaultConfigPath, true);
-                    File.Delete(backupConfigPath);
-                }
-                // 清理临时配置文件
-                if (File.Exists(tempConfigPath))
-                    File.Delete(tempConfigPath);
+                if (process.ExitCode != 0)
+                    throw new Exception($"PMX2FBX执行失败，退出码: {process.ExitCode}");
+
+                return FindGeneratedFbxPath(pmxPath, vmdPath);
             }
         }
 
@@ -549,48 +592,10 @@ namespace VMD2Anim
             //     File.Delete(metaPath);
             // }
         }
-        private static void GenerateQuickConvertConfig(string configPath, bool quickMode)
-        {
-            if (!quickMode) return;
-
-            string xml = @"<?xml version=""1.0"" encoding=""utf-8""?>
-<PMX2FBXConfig  xmlns:xsd=""http://www.w3.org/2001/XMLSchema"" xmlns:xsi=""http://www.w3.org/2001/XMLSchema-instance"">
-    <globalSettings>
-        <editorAdvancedMode>true</editorAdvancedMode>
-        <blendShapesFlag>0</blendShapesFlag>
-        <morphRenameFlag>0</morphRenameFlag>
-        <prefixMorphNoNameFlag>0</prefixMorphNoNameFlag>
-        <materialRenameFlag>0</materialRenameFlag>
-        <prefixMaterialNoNameFlag>0</prefixMaterialNoNameFlag>
-        <escapeMaterialNameFlag>0</escapeMaterialNameFlag>
-        <splitMeshFlag>0</splitMeshFlag>
-        <animKeyReductionFlag>1</animKeyReductionFlag>
-        <animNullAnimationFlag>0</animNullAnimationFlag>
-        <animRootTransformFlag>0</animRootTransformFlag>
-        <animKeyRotationEpsilon1>0.02</animKeyRotationEpsilon1>
-        <animKeyRotationEpsilon2>0.03</animKeyRotationEpsilon2>
-        <animKeyTranslationEpsilon1>0.002</animKeyTranslationEpsilon1>
-        <animKeyTranslationEpsilon2>0.003</animKeyTranslationEpsilon2>
-        <animAwakeWaitingTime>0</animAwakeWaitingTime>
-        <enableFBXTexture>0</enableFBXTexture>
-    </globalSettings>
-    <bulletPhysics>
-        <enabled>0</enabled>
-    </bulletPhysics>
-    <renameList />
-  <splitMeshBoneList />
-  <edgeStretchList />
-  <freezeRigidBodyList />
-  <freezeMotionList />
-</PMX2FBXConfig>";
-            File.WriteAllText(configPath, xml);
-            UnityEngine.Debug.Log($"[VMD转换] 生成快速模式配置文件: {configPath}");
-        }
-
         /// <summary>
-        /// 修复路径转换，确保生成正确的Assets相对路径
+        /// 修复路径转换，确保生成正确的 Assets 相对路径
         /// </summary>
-        private static string MakeRelativePath(string absolutePath)
+        public static string MakeRelativePath(string absolutePath)
         {
             try
             {

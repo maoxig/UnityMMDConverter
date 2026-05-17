@@ -26,7 +26,7 @@ namespace UnityMMDConverter
     {
         private const string DefaultOutputPath = "Assets/UnityMMDConverter/Output/";
         private const string TempBuildFolder = "Assets/Temp/TempPureBuild/";
-        private const float DefaultFrameRate = 30f;
+        private float DefaultFrameRate = 30f;
 
         // 核心组件引用
         private AnimationClip sourceClip;
@@ -518,6 +518,7 @@ namespace UnityMMDConverter
 
             addMorphCurves = EditorGUILayout.Toggle(Get(ADD_MORPH_CURVES), addMorphCurves);
             addCameraCurves = EditorGUILayout.Toggle(Get(ADD_CAMERA_CURVES), addCameraCurves);
+            DefaultFrameRate = EditorGUILayout.FloatField("Frame Rate", DefaultFrameRate);
 
             EditorGUILayout.BeginHorizontal();
             if (addMorphCurves && addCameraCurves)
@@ -875,6 +876,12 @@ namespace UnityMMDConverter
 
             // 自动打开Timeline窗口（提升用户体验）
             EditorApplication.ExecuteMenuItem("Window/Sequencing/Timeline");
+
+            // 自动帮用户在场景中选中导演对象，方便用户定位
+            if (directorObj != null)
+            {
+                Selection.activeGameObject = directorObj;
+            }
         }
 
 
