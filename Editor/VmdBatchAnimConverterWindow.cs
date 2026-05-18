@@ -15,7 +15,7 @@ using static UnityMMDConverter.L10nKeys;
 namespace UnityMMDConverter
 {
     /// <summary>
-    /// 批量将 VMD 转为 .anim：阶段 1 并行 PMX2FBX，阶段 2 串行 Unity 导入。
+    /// 批量将 VMD 转为 .anim：并行 PMX2FBX，每个 FBX 完成后立即导入生成 .anim。
     /// </summary>
     public class VmdBatchAnimConverterWindow : EditorWindow
     {
@@ -74,6 +74,7 @@ namespace UnityMMDConverter
         private int failedCount;
 
         private CancellationTokenSource cancellationTokenSource;
+        private int batchFinishedJobs;
 
         [MenuItem("MMD for Unity/VMD Batch To Anim", false, 2)]
         public static void ShowWindow()
@@ -101,8 +102,7 @@ namespace UnityMMDConverter
 
             EditorGUILayout.LabelField("VMD 批量转 .anim", EditorStyles.boldLabel);
             EditorGUILayout.HelpBox(
-                "阶段 1：并行调用 PMX2FBX 生成 FBX（节省等待时间，不改写工具目录 pmx2fbx.xml）。\n" +
-                "阶段 2：在 Unity 主线程依次导入 FBX 并写出 .anim。\n" +
+                "并行调用 PMX2FBX；每个 VMD 的 FBX 生成成功后，会立刻导入并写出 .anim（默认与 VMD 同目录）。\n" +
                 "请将所有 VMD 放在当前项目 Assets 下；可拖拽添加，也可用文件夹批量导入。",
                 MessageType.Info);
 
@@ -363,8 +363,7 @@ namespace UnityMMDConverter
             string batchTempAbs = Path.GetFullPath(BatchTempRoot);
             AssetUtils.EnsureDirectoryExists(batchTempAbs);
 
-            int total = pending.Count;
-            int pmx2FbxDone = 0;
+            batchFinishedJobs = 0;
             var pmxUsageCount = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
             try
@@ -411,14 +410,14 @@ namespace UnityMMDConverter
                 workItems = workItems.Where(i => i.State != BatchItemState.Failed).ToList();
                 workTotal = workItems.Count;
 
-                // —— 阶段 1：并行 PMX2FBX ——
-                batchPhase = $"阶段 1/2：并行 PMX2FBX（×{maxParallel}）";
-                var semaphore = new SemaphoreSlim(maxParallel, maxParallel);
+                batchPhase = $"批量转换（PMX2FBX ×{maxParallel}，完成即导入 .anim）";
+                var pmxSemaphore = new SemaphoreSlim(maxParallel, maxParallel);
+                var importLock = new SemaphoreSlim(1, 1);
                 string toolPath = settings.PMX2FBXPath;
 
-                var fbxTasks = workItems.Select(async item =>
+                var pipelineTasks = workItems.Select(async item =>
                 {
-                    await semaphore.WaitAsync(token);
+                    await pmxSemaphore.WaitAsync(token);
                     try
                     {
                         token.ThrowIfCancellationRequested();
@@ -436,23 +435,29 @@ namespace UnityMMDConverter
                         }
 
                         string workDir = Path.GetDirectoryName(pmxForJob);
-                        string vmdAbs = ToAbsolutePath(item.VmdPath);
-
                         item.FbxAbsPath = await VMDConverter.RunPMX2FBXAsync(
                             toolPath,
                             pmxForJob,
-                            vmdAbs,
+                            ToAbsolutePath(item.VmdPath),
                             workDir,
                             quickMode,
                             timeoutSeconds * 1000,
                             token);
 
-                        item.Message = "FBX 完成";
-                        Interlocked.Increment(ref pmx2FbxDone);
-                        overallProgress = 0.45f * pmx2FbxDone / Math.Max(1, workTotal);
-                        progressMessage =
-                            $"PMX2FBX {pmx2FbxDone}/{workTotal} — {Path.GetFileName(item.VmdPath)}";
+                        item.Message = "导入 .anim…";
                         RepaintOnMainThread();
+
+                        await importLock.WaitAsync(token);
+                        try
+                        {
+                            await RunOnMainThreadAsync(
+                                () => ImportBatchItemAnim(item, workTotal),
+                                token);
+                        }
+                        finally
+                        {
+                            importLock.Release();
+                        }
                     }
                     catch (OperationCanceledException)
                     {
@@ -462,93 +467,23 @@ namespace UnityMMDConverter
                     }
                     catch (Exception ex)
                     {
-                        item.State = BatchItemState.Failed;
-                        item.Message = TruncateMessage(ex.Message);
-                        item.FbxAbsPath = null;
-                        Debug.LogError($"[VMD Batch][PMX2FBX] {item.VmdPath}: {ex}");
+                        if (item.State != BatchItemState.Success)
+                        {
+                            item.State = BatchItemState.Failed;
+                            item.Message = TruncateMessage(ex.Message);
+                            Interlocked.Increment(ref failedCount);
+                        }
+                        Debug.LogError($"[VMD Batch] {item.VmdPath}: {ex}");
+                        int done = Interlocked.Increment(ref batchFinishedJobs);
+                        UpdateBatchProgress(done, workTotal, item);
                     }
                     finally
                     {
-                        semaphore.Release();
+                        pmxSemaphore.Release();
                     }
                 });
 
-                await Task.WhenAll(fbxTasks);
-
-                // —— 阶段 2：串行 Unity 导入 ——
-                batchPhase = "阶段 2/2：Unity 导入并生成 .anim";
-                AssetDatabase.Refresh(ImportAssetOptions.ForceUpdate);
-
-                int importIndex = 0;
-                foreach (var item in workItems)
-                {
-                    token.ThrowIfCancellationRequested();
-
-                    if (item.State == BatchItemState.Cancelled)
-                        continue;
-
-                    if (string.IsNullOrEmpty(item.FbxAbsPath) || !File.Exists(item.FbxAbsPath))
-                    {
-                        if (item.State != BatchItemState.Failed)
-                        {
-                            item.State = BatchItemState.Failed;
-                            item.Message = "无 FBX";
-                        }
-                        failedCount++;
-                        completedCount++;
-                        continue;
-                    }
-
-                    item.State = BatchItemState.Running;
-                    item.Message = "导入…";
-                    importIndex++;
-                    progressMessage =
-                        $"导入 {importIndex}/{workTotal} — {Path.GetFileName(item.VmdPath)}";
-                    overallProgress = 0.45f + 0.55f * importIndex / Math.Max(1, workTotal);
-                    Repaint();
-
-                    string animFullPath = Path.Combine(
-                        item.AnimOutputDir,
-                        Path.GetFileNameWithoutExtension(item.VmdPath) + ".anim");
-
-                    try
-                    {
-                        bool ok = VMDConverter.ImportFbxAndSaveAnim(
-                            item.FbxAbsPath,
-                            animFullPath,
-                            overwriteExisting,
-                            quickLoadAnim: true,
-                            (p, msg) =>
-                            {
-                                progressMessage =
-                                    $"导入 {importIndex}/{workTotal} — {Path.GetFileName(item.VmdPath)} — {msg}";
-                            },
-                            scheduleFbxCleanup: true);
-
-                        if (ok && File.Exists(animFullPath))
-                        {
-                            item.State = BatchItemState.Success;
-                            item.Message = "完成";
-                            successCount++;
-                        }
-                        else
-                        {
-                            item.State = BatchItemState.Failed;
-                            item.Message = "导入失败";
-                            failedCount++;
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        item.State = BatchItemState.Failed;
-                        item.Message = TruncateMessage(ex.Message);
-                        failedCount++;
-                        Debug.LogError($"[VMD Batch][Import] {item.VmdPath}: {ex}");
-                    }
-
-                    completedCount++;
-                    Repaint();
-                }
+                await Task.WhenAll(pipelineTasks);
 
                 completedCount = batchItems.Count(i =>
                     i.State != BatchItemState.Pending && i.State != BatchItemState.Running);
@@ -580,9 +515,95 @@ namespace UnityMMDConverter
             }
         }
 
+        private void ImportBatchItemAnim(BatchItem item, int workTotal)
+        {
+            if (string.IsNullOrEmpty(item.FbxAbsPath) || !File.Exists(item.FbxAbsPath))
+            {
+                item.State = BatchItemState.Failed;
+                item.Message = "无 FBX";
+                Interlocked.Increment(ref failedCount);
+                int doneFail = Interlocked.Increment(ref batchFinishedJobs);
+                UpdateBatchProgress(doneFail, workTotal, item);
+                return;
+            }
+
+            string animFullPath = Path.Combine(
+                item.AnimOutputDir,
+                Path.GetFileNameWithoutExtension(item.VmdPath) + ".anim");
+
+            bool ok = VMDConverter.ImportFbxAndSaveAnim(
+                item.FbxAbsPath,
+                animFullPath,
+                overwriteExisting,
+                quickLoadAnim: true,
+                null,
+                scheduleFbxCleanup: true);
+
+            if (ok && File.Exists(animFullPath))
+            {
+                item.State = BatchItemState.Success;
+                item.Message = "完成";
+                Interlocked.Increment(ref successCount);
+            }
+            else
+            {
+                item.State = BatchItemState.Failed;
+                item.Message = "导入失败";
+                Interlocked.Increment(ref failedCount);
+            }
+
+            int done = Interlocked.Increment(ref batchFinishedJobs);
+            UpdateBatchProgress(done, workTotal, item);
+            Repaint();
+        }
+
+        private void UpdateBatchProgress(int finished, int total, BatchItem item)
+        {
+            overallProgress = total > 0 ? (float)finished / total : 0f;
+            progressMessage = $"{finished}/{total} — {Path.GetFileName(item.VmdPath)} — {item.Message}";
+            RepaintOnMainThread();
+        }
+
+        private static Task RunOnMainThreadAsync(Action action, CancellationToken token)
+        {
+            var tcs = new TaskCompletionSource<bool>();
+            if (token.IsCancellationRequested)
+            {
+                tcs.SetCanceled();
+                return tcs.Task;
+            }
+
+            CancellationTokenRegistration reg = default;
+            EditorApplication.delayCall += () =>
+            {
+                if (token.IsCancellationRequested)
+                {
+                    tcs.TrySetCanceled();
+                    return;
+                }
+
+                try
+                {
+                    action();
+                    tcs.TrySetResult(true);
+                }
+                catch (Exception ex)
+                {
+                    tcs.TrySetException(ex);
+                }
+            };
+
+            if (token.CanBeCanceled)
+            {
+                reg = token.Register(() => tcs.TrySetCanceled());
+                tcs.Task.ContinueWith(_ => reg.Dispose(), TaskScheduler.Default);
+            }
+
+            return tcs.Task;
+        }
+
         private static void RepaintOnMainThread()
         {
-            // Task 线程中刷新 Editor 窗口
             EditorApplication.delayCall += () =>
             {
                 var w = GetWindow<VmdBatchAnimConverterWindow>(false, null, false);
@@ -824,7 +845,7 @@ namespace UnityMMDConverter
             autoFindPmxBesideVmd = EditorPrefs.GetBool(EditorPrefsPrefix + "autoFindPmx", true);
             referencePmxPath = EditorPrefs.GetString(EditorPrefsPrefix + "referencePmx", "");
             outputLocationMode = (OutputLocationMode)EditorPrefs.GetInt(
-                EditorPrefsPrefix + "outputMode", (int)OutputLocationMode.DefaultFolder);
+                EditorPrefsPrefix + "outputMode", (int)OutputLocationMode.SameAsVmd);
             customOutputPath = EditorPrefs.GetString(EditorPrefsPrefix + "customOutput", DefaultOutputPath);
             overwriteExisting = EditorPrefs.GetBool(EditorPrefsPrefix + "overwrite", true);
             timeoutSeconds = EditorPrefs.GetInt(EditorPrefsPrefix + "timeout", 300);
